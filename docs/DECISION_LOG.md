@@ -1,9 +1,8 @@
-## Milestone 3: Model Benchmark and Threshold Optimization
+## Milestone 4: Operational Threshold Selection and Subgroup Audit
 
 * **Date**: October 23, 2026
 * **Decisions**:
-  1. Benchmark Comparison: Evaluated Logistic Regression (ROC-AUC 0.6711), Decision Tree (ROC-AUC 0.6523), and Random Forest (ROC-AUC 0.6734) on a held-out test split of 19,676 encounters with zero patient overlap.
-  2. Model Selection: Selected Random Forest Classifier as the primary model based on superior discriminative capacity (ROC-AUC 0.6734 >= 0.65 target) and ensemble stability.
-  3. Feature Drivers: Top predictive signals identified as past inpatient visits (20.65%), discharge disposition destinations, emergency visits, and medication counts.
-  4. Packaging: Exported preprocessor and model as a unified `Pipeline` to `app/readmission_rf_pipeline.joblib` for Module 6 application integration.
+  1. Operational Threshold: Calibrated Random Forest decision threshold from default 0.50 to 0.49 to meet the project recall requirement (Recall: 60.58% >= 0.60 target; False Negatives reduced from 984 to 874).
+  2. Artifact Serialization: Packaged end-to-end ColumnTransformer and RandomForestClassifier into `app/readmission_rf_pipeline.joblib` (7.09 MB). Smoke tests verified end-to-end functionality on raw DataFrame rows.
+  3. Ethical Subgroup Audit: Evaluated performance disparities across race and age cohorts on held-out test data (N=19,676) to identify differential sensitivity.
 * **Status**: Confirmed
