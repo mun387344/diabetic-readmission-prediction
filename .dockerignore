@@ -1,0 +1,10 @@
+data/
+notebooks/
+tests/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.vscode/
+*.docx
+*.ipynb
