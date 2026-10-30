@@ -132,3 +132,68 @@ def audit_gender_subgroups():
 
 if __name__ == "__main__":
     audit_gender_subgroups()
+    
+    
+def audit_age_subgroups():
+    df_test = pd.read_csv(TEST_DATA_PATH)
+    y_true = (df_test["readmitted"] == "<30").astype(int)
+    
+    drop_cols = ["readmitted", "encounter_id", "patient_nbr"]
+    X_test = df_test.drop(columns=[c for c in drop_cols if c in df_test.columns])
+    
+    pipeline = joblib.load(MODEL_PATH)
+    y_probs = pipeline.predict_proba(X_test)[:, 1]
+    y_pred = (y_probs >= OPERATIONAL_THRESHOLD).astype(int)
+    
+    eval_df = pd.DataFrame({
+        "age": df_test["age"].fillna("Missing"),
+        "y_true": y_true,
+        "y_pred": y_pred,
+        "y_prob": y_probs
+    })
+    
+    records = []
+    # Sort logically by bracket order
+    age_order = [
+        "[0-10)", "[10-20)", "[20-30)", "[30-40)", "[40-50)",
+        "[50-60)", "[60-70)", "[70-80)", "[80-90)", "[90-100)"
+    ]
+    
+    for age_group in age_order:
+        group = eval_df[eval_df["age"] == age_group]
+        n_total = len(group)
+        if n_total == 0:
+            continue
+        positives = group["y_true"].sum()
+        
+        if positives >= 10:
+            rec = recall_score(group["y_true"], group["y_pred"], zero_division=0)
+            prec = precision_score(group["y_true"], group["y_pred"], zero_division=0)
+            try:
+                auc = roc_auc_score(group["y_true"], group["y_prob"])
+            except ValueError:
+                auc = np.nan
+            fnr = 1.0 - rec
+        else:
+            rec, prec, auc, fnr = np.nan, np.nan, np.nan, np.nan
+            
+        records.append({
+            "Subgroup (Age)": age_group,
+            "N": n_total,
+            "True Readmits (<30)": int(positives),
+            "Recall (>=0.60)": round(rec, 4) if not np.isnan(rec) else "N/A (low sample)",
+            "Precision": round(prec, 4) if not np.isnan(prec) else "N/A (low sample)",
+            "FNR (False Neg)": round(fnr, 4) if not np.isnan(fnr) else "N/A (low sample)",
+            "ROC-AUC": round(auc, 4) if not np.isnan(auc) else "N/A (low sample)"
+        })
+        
+    summary_table = pd.DataFrame(records)
+    print("\n" + "="*80)
+    print("SUBGROUP FAIRNESS & DISPARITY AUDIT: AGE BRACKETS")
+    print(f"Operational Decision Threshold: tau = {OPERATIONAL_THRESHOLD}")
+    print("="*80)
+    print(summary_table.to_string(index=False))
+    print("="*80)
+
+if __name__ == "__main__":
+    audit_age_subgroups()
