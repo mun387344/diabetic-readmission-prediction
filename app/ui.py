@@ -115,7 +115,7 @@ with tab4:
 st.markdown("---")
 
 # Predict Button
-if st.button("🔍 Run Readmission Risk Assessment", type="primary", use_container_width=True):
+if st.button("Run Readmission Risk Assessment", type="primary", use_container_width=True):
     # 1. Package all widget values to match PatientEncounterInput schema
     payload = {
         "race": race,
