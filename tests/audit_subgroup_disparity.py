@@ -75,3 +75,60 @@ def audit_race_subgroups():
 
 if __name__ == "__main__":
     audit_race_subgroups()
+    
+    
+    
+def audit_gender_subgroups():
+    df_test = pd.read_csv(TEST_DATA_PATH)
+    y_true = (df_test["readmitted"] == "<30").astype(int)
+    
+    drop_cols = ["readmitted", "encounter_id", "patient_nbr"]
+    X_test = df_test.drop(columns=[c for c in drop_cols if c in df_test.columns])
+    
+    pipeline = joblib.load(MODEL_PATH)
+    y_probs = pipeline.predict_proba(X_test)[:, 1]
+    y_pred = (y_probs >= OPERATIONAL_THRESHOLD).astype(int)
+    
+    eval_df = pd.DataFrame({
+        "gender": df_test["gender"].fillna("Missing"),
+        "y_true": y_true,
+        "y_pred": y_pred,
+        "y_prob": y_probs
+    })
+    
+    records = []
+    for gender_group, group in eval_df.groupby("gender"):
+        n_total = len(group)
+        positives = group["y_true"].sum()
+        
+        if positives >= 10:
+            rec = recall_score(group["y_true"], group["y_pred"], zero_division=0)
+            prec = precision_score(group["y_true"], group["y_pred"], zero_division=0)
+            try:
+                auc = roc_auc_score(group["y_true"], group["y_prob"])
+            except ValueError:
+                auc = np.nan
+            fnr = 1.0 - rec
+        else:
+            rec, prec, auc, fnr = np.nan, np.nan, np.nan, np.nan
+            
+        records.append({
+            "Subgroup (Gender)": gender_group,
+            "N": n_total,
+            "True Readmits (<30)": int(positives),
+            "Recall (>=0.60)": round(rec, 4) if not np.isnan(rec) else "N/A",
+            "Precision": round(prec, 4) if not np.isnan(prec) else "N/A",
+            "FNR (False Neg)": round(fnr, 4) if not np.isnan(fnr) else "N/A",
+            "ROC-AUC": round(auc, 4) if not np.isnan(auc) else "N/A"
+        })
+        
+    summary_table = pd.DataFrame(records)
+    print("\n" + "="*80)
+    print("SUBGROUP FAIRNESS & DISPARITY AUDIT: GENDER COHORTS")
+    print(f"Operational Decision Threshold: tau = {OPERATIONAL_THRESHOLD}")
+    print("="*80)
+    print(summary_table.to_string(index=False))
+    print("="*80)
+
+if __name__ == "__main__":
+    audit_gender_subgroups()
