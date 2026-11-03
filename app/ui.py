@@ -1,10 +1,15 @@
 import streamlit as st
 import requests
-import streamlit as st
-import requests
 import pandas as pd
 import joblib
 import os
+
+@st.cache_resource
+def load_fallback_model():
+    model_path = os.path.join(os.path.dirname(__file__), "readmission_rf_pipeline.joblib")
+    if os.path.exists(model_path):
+        return joblib.load(model_path)
+    return None
 
 # Configure page layout and title
 st.set_page_config(
@@ -169,46 +174,59 @@ if st.button("Run Readmission Risk Assessment", type="primary", use_container_wi
         "diabetesMed": diabetesMed
     }
 
-    # 2. Transmit to FastAPI inference microservice
+    # 2. Dual-mode inference: Attempt FastAPI first, fallback to direct pipeline
     with st.spinner("Analyzing encounter data through calibrated Random Forest pipeline..."):
+        result = None
+        
+        # Primary Path: FastAPI Endpoint
         try:
-            res = requests.post(API_PREDICT_URL, json=payload, timeout=5)
-            
+            res = requests.post(API_PREDICT_URL, json=payload, timeout=2)
             if res.status_code == 200:
                 result = res.json()
-                prob = result["readmission_probability"]
-                tier = result["risk_tier"]
-                threshold = result["operational_threshold"]
-                rec = result["recommendation"]
-
-                st.subheader("Clinical Risk Assessment Result")
+        except requests.exceptions.RequestException:
+            # Fallback Path: Streamlit Cloud / Direct Model Inference
+            pipeline = load_fallback_model()
+            if pipeline is not None:
+                input_df = pd.DataFrame([payload])
+                prob = float(pipeline.predict_proba(input_df)[0][1])
+                tau = 0.48
+                is_high_risk = prob >= tau
                 
-                # Display metrics in prominent columns
-                m_col1, m_col2, m_col3 = st.columns(3)
-                with m_col1:
-                    st.metric(
-                        label="Predicted 30-Day Risk",
-                        value=f"{prob * 100:.1f}%"
+                result = {
+                    "readmission_probability": prob,
+                    "operational_threshold": tau,
+                    "risk_tier": "HIGH READMISSION RISK" if is_high_risk else "LOW READMISSION RISK",
+                    "recommendation": (
+                        "Immediate post-discharge coordination recommended: schedule follow-up within 7 days, "
+                        "reconcile diabetes medications, and alert care-transition nurse."
+                        if is_high_risk else
+                        "Standard discharge workflow: provide diabetes education summary and schedule routine follow-up."
                     )
-                with m_col2:
-                    st.metric(
-                        label="Operational Threshold (τ)",
-                        value=f"{threshold * 100:.1f}%"
-                    )
-                with m_col3:
-                    if "HIGH" in tier:
-                        st.error(f"🚨 {tier}")
-                    else:
-                        st.success(f"✅ {tier}")
+                }
 
-                # Clinical recommendation card
+        # 3. Render Results
+        if result:
+            prob = result["readmission_probability"]
+            tier = result["risk_tier"]
+            threshold = result["operational_threshold"]
+            rec = result["recommendation"]
+
+            st.subheader("Clinical Risk Assessment Result")
+            
+            m_col1, m_col2, m_col3 = st.columns(3)
+            with m_col1:
+                st.metric(label="Predicted 30-Day Risk", value=f"{prob * 100:.1f}%")
+            with m_col2:
+                st.metric(label="Operational Threshold (τ)", value=f"{threshold * 100:.1f}%")
+            with m_col3:
                 if "HIGH" in tier:
-                    st.warning(f"**Discharge Action Recommended:**\n\n{rec}")
+                    st.error(f"🚨 {tier}")
                 else:
-                    st.info(f"**Discharge Action Recommended:**\n\n{rec}")
+                    st.success(f"✅ {tier}")
 
+            if "HIGH" in tier:
+                st.warning(f"**Discharge Action Recommended:**\n\n{rec}")
             else:
-                st.error(f"API Error ({res.status_code}): {res.text}")
-
-        except requests.exceptions.RequestException as e:
-            st.error(f"Failed to communicate with prediction API: {str(e)}")
+                st.info(f"**Discharge Action Recommended:**\n\n{rec}")
+        else:
+            st.error("Inference service unavailable. Verify pipeline artifact exists at app/readmission_rf_pipeline.joblib.")
