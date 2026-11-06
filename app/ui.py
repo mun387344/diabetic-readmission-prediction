@@ -1,9 +1,25 @@
+import os
+import sys
+from pathlib import Path
+
+# Add repository root to Python path so 'app.schemas' resolves in all environments
+CURRENT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = CURRENT_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
+
 import streamlit as st
 import requests
 import pandas as pd
 import joblib
-import os
-from app.schemas import PatientEncounterInput
+
+# Support both root execution and direct folder execution
+try:
+    from app.schemas import PatientEncounterInput
+except ModuleNotFoundError:
+    from schemas import PatientEncounterInput
 
 @st.cache_resource
 def load_fallback_model():
