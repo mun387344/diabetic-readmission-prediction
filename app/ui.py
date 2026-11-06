@@ -38,7 +38,7 @@ st.set_page_config(
 # Header and Clinical Context
 st.title("🏥 Diabetic 30-Day Readmission Risk Engine")
 st.caption(
-    "Decision-Support Prototype | UCI Diabetes 130-US Hospitals (1999–2008) | Group 15"
+    "Decision-Support Prototype | UCI Diabetes 130-US Hospitals (1999–2008)"
 )
 
 # Clinical Disclaimer required by governance & ethics protocol
