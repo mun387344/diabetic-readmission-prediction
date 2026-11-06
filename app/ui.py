@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import joblib
 import os
+from app.schemas import PatientEncounterInput
 
 @st.cache_resource
 def load_fallback_model():
@@ -45,7 +46,7 @@ with col_status:
         else:
             st.warning("⚠️ Backend returned unexpected status.")
     except Exception:
-        st.error("❌ Backend API Unreachable. Ensure Uvicorn is running on port 8000.")
+        st.caption("☁️ Cloud Standalone Mode: Direct Embedded Pipeline Active (tau = 0.48)")
         
         
         
@@ -187,20 +188,32 @@ if st.button("Run Readmission Risk Assessment", type="primary", use_container_wi
             # Fallback Path: Streamlit Cloud / Direct Model Inference
             pipeline = load_fallback_model()
             if pipeline is not None:
-                input_df = pd.DataFrame([payload])
-                prob = float(pipeline.predict_proba(input_df)[0][1])
+                # 1. Reconstruct encounter using the Pydantic schema
+                validated_encounter = PatientEncounterInput(**payload)
+                input_dict = validated_encounter.model_dump(by_alias=True)
+                input_df = pd.DataFrame([input_dict])
+                
+                # 2. Guarantee all feature columns expected by the pipeline exist
+                expected_cols = list(pipeline.feature_names_in_)
+                for col in expected_cols:
+                    if col not in input_df.columns:
+                        input_df[col] = "?"
+                input_df = input_df[expected_cols]
+
+                # 3. Compute continuous readmission probability
+                prob = float(pipeline.predict_proba(input_df)[0, 1])
                 tau = 0.48
                 is_high_risk = prob >= tau
                 
                 result = {
-                    "readmission_probability": prob,
+                    "readmission_probability": round(prob, 4),
                     "operational_threshold": tau,
-                    "risk_tier": "HIGH READMISSION RISK" if is_high_risk else "LOW READMISSION RISK",
+                    "risk_tier": "HIGH RISK (<30d)" if is_high_risk else "STANDARD RISK",
                     "recommendation": (
-                        "Immediate post-discharge coordination recommended: schedule follow-up within 7 days, "
-                        "reconcile diabetes medications, and alert care-transition nurse."
+                        "Flagged for clinical care coordination: arrange 48-72h post-discharge "
+                        "follow-up call and verify glycemic medication regimen."
                         if is_high_risk else
-                        "Standard discharge workflow: provide diabetes education summary and schedule routine follow-up."
+                        "Standard discharge protocol: routine outpatient follow-up."
                     )
                 }
 
