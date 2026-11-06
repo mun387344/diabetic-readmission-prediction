@@ -62,7 +62,7 @@ with col_status:
         else:
             st.warning("⚠️ Backend returned unexpected status.")
     except Exception:
-        st.caption("☁️ Cloud Standalone Mode: Direct Embedded Pipeline Active (tau = 0.48)")
+        st.caption("☁️ Cloud Standalone Mode: Direct Embedded Pipeline Active (τ = 0.48)")
         
         
         
